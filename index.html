@@ -49,25 +49,24 @@
         </div>
 
         <div class="btn-zone" id="nav-controls" style="display:none;">
-            <button class="btn-nav" id="prevBtn" onclick="move(-1)">⬅️ Anterior</button>
+            <button class="btn-nav" onclick="move(-1)">⬅️ Anterior</button>
             <input type="color" id="brushColor" value="#2e7d32" style="width:50px; height:45px; border-radius:10px; border:none; cursor:pointer;">
             <button class="btn-nav" onclick="clearC()">🧹 Borrar</button>
-            <button class="btn-nav" id="nextBtn" onclick="move(1)">Siguiente ➡️</button>
+            <button class="btn-nav" onclick="move(1)">Siguiente ➡️</button>
         </div>
 
         <div id="author-zone" style="margin-top:30px; display:none;">
-            <hr style="border:1px solid #eee;">
-            <h3>📤 ¡Libro Terminado!</h3>
+            <hr style="border:1px solid #eee; margin-bottom: 20px;">
+            <h3 style="color: var(--p)">📤 ¡LIBRO TERMINADO!</h3>
             <div class="btn-zone">
-                <button class="btn-share" id="shareBtn" onclick="copyLink()">📋 COPIAR ENLACE PARA EL NIÑO</button>
-                <button class="btn-pdf" id="pdfBtn" onclick="savePDF()">📥 GUARDAR COMO PDF</button>
+                <button class="btn-share" onclick="copyLink()">📋 COPIAR ENLACE PARA EL NIÑO</button>
+                <button class="btn-pdf" onclick="savePDF()">📥 GUARDAR COMO PDF</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    // TUS LLAVES ACTUALIZADAS
     const G_KEY = "AIzaSyANHfYhYRkoHZ4WfwqpPFOKxE-YeRkyfQw";
     const H_TOKEN = "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";
 
@@ -77,24 +76,12 @@
     const ctx = canv.getContext('2d');
     let drawing = false;
 
-    // Detectar si venimos de un enlace compartido
-    window.onload = () => {
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('data')) {
-            try {
-                book = JSON.parse(atob(params.get('data')));
-                document.querySelector('.input-group').style.display = 'none';
-                startReading();
-            } catch(e) { console.error("Error cargando datos"); }
-        }
-    };
-
     async function queryHuggingFace(payload) {
         const res = await fetch("https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5", {
             method:"POST", headers:{"Authorization":`Bearer ${H_TOKEN}`},
             body: JSON.stringify(payload)
         });
-        if (res.status === 503) { // El modelo está cargando
+        if (res.status === 503) { 
             await new Promise(r => setTimeout(r, 5000));
             return queryHuggingFace(payload);
         }
@@ -111,7 +98,6 @@
         btn.disabled = true;
 
         try {
-            // 1. Gemini: Generar historia
             const prompt = `Escribe un cuento infantil corto sobre ${topic}. Dividido en 5 escenas. Devuelve UNICAMENTE un JSON: {"titulo": "Título", "escenas": ["e1", "e2", "e3", "e4", "e5"]}`;
             const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
                 method:"POST", headers:{"Content-Type":"application/json"},
@@ -125,30 +111,26 @@
             book.pages = [parsed.titulo, ...parsed.escenas];
             book.images = [];
 
-            // 2. HuggingFace: Dibujar escenas
             for(let i=0; i<6; i++) {
                 loader.innerText = `🖌️ Dibujando imagen ${i+1} de 6...`;
-                const style = (i===0) ? "Pixar style, colorful, 3d render" : "Coloring book, black and white, simple lines";
+                const style = (i===0) ? "Pixar style, colorful" : "Coloring book, black and white, simple lines";
                 const blob = await queryHuggingFace({inputs: `${style}, ${book.pages[i]}`});
                 book.images.push(await new Promise(r => {
                     const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob);
                 }));
             }
 
+            // ACTIVAR VISIBILIDAD DE CONTROLES Y BOTONES
             loader.style.display = "none";
-            startReading();
-            document.getElementById('author-zone').style.display = 'block';
+            document.getElementById('nav-controls').style.display = 'flex';
+            document.getElementById('author-zone').style.display = 'block'; // AQUÍ SE ACTIVAN LOS BOTONES
+            showPage(0);
             
         } catch (e) { 
-            alert("¡Ups! Error de conexión. Revisa que las llaves estén activas en la consola.");
+            alert("Error. Revisa tus llaves.");
             loader.style.display = "none";
             btn.disabled = false;
         }
-    }
-
-    function startReading() {
-        document.getElementById('nav-controls').style.display = 'flex';
-        showPage(0);
     }
 
     function showPage(idx) {
@@ -165,7 +147,7 @@
         if(n >= 0 && n < 6) showPage(n);
     }
 
-    // Funciones de dibujo
+    // Dibujo
     canv.onmousedown = (e) => { if(cur!==0) { drawing = true; paint(e); } };
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
@@ -184,7 +166,7 @@
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(book))));
         const url = window.location.href.split('?')[0] + "?data=" + encoded;
         navigator.clipboard.writeText(url);
-        alert("¡Enlace copiado! Pégalo en WhatsApp.");
+        alert("¡Enlace copiado! Pégalo donde quieras.");
     }
 
     function savePDF() {
@@ -192,7 +174,7 @@
         const doc = new jsPDF('l', 'mm', [210, 148]);
         doc.text(book.title, 105, 20, {align: 'center'});
         doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 30, 180, 100);
-        doc.save(`Cuento-${book.title}.pdf`);
+        doc.save(`Mi-Cuento.pdf`);
     }
 </script>
 </body>
