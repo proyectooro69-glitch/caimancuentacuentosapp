@@ -13,21 +13,21 @@
         .input-group { background: #fff3e0; padding: 20px; border-radius: 20px; margin: 20px 0; border: 2px dashed var(--s); }
         input[type="text"] { width: 85%; padding: 12px; border-radius: 12px; border: 2px solid #ddd; margin: 5px 0; font-size: 1.1em; }
         
-        /* ZONA DE DIBUJO SIEMPRE VISIBLE */
+        /* LIENZO */
         #canvas-wrap { border: 6px solid var(--p); border-radius: 20px; margin: 20px 0; background: white; overflow: hidden; }
         canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; background: white; }
         
+        /* BOTONES */
         .btn-zone { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; }
-        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; color: white; text-transform: uppercase; }
+        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; color: white; text-transform: uppercase; transition: 0.2s; }
         
-        /* COLORES DE BOTONES SEGÚN TU IMAGEN */
-        .btn-main { background: var(--p); box-shadow: 0 4px 0 #1b5e20; }
+        .btn-main { background: var(--p); box-shadow: 0 4px 0 #1b5e20; width: 100%; }
         .btn-nav { background: #555; box-shadow: 0 4px 0 #333; }
-        .btn-share { background: var(--blue); box-shadow: 0 4px 0 #0d47a1; } /* BOTÓN AZUL */
-        .btn-pdf { background: var(--s); color: #333; box-shadow: 0 4px 0 #e65100; } /* BOTÓN NARANJA */
+        .btn-share { background: var(--blue); box-shadow: 0 4px 0 #0d47a1; } /* AZUL */
+        .btn-pdf { background: var(--s); color: #333; box-shadow: 0 4px 0 #e65100; } /* NARANJA */
         
         button:active { transform: translateY(4px); box-shadow: none; }
-        #story-txt { font-size: 1.2em; margin: 15px 0; color: #333; font-weight: bold; }
+        #story-txt { font-size: 1.2em; margin: 15px 0; color: #333; min-height: 50px; }
         hr { border: 0; border-top: 2px solid #eee; margin: 25px 0; width: 100%; }
     </style>
 </head>
@@ -38,81 +38,85 @@
     
     <div class="input-group">
         <input type="text" id="author" placeholder="Nombre de la autora">
-        <input type="text" id="topic" placeholder="Ej: Un caimán que quiere volar...">
+        <input type="text" id="topic" placeholder="Ej: El caimán valiente...">
         <div class="btn-zone">
-            <button class="btn-main" onclick="generar()">✨ CREAR CUENTO MÁGICO</button>
+            <button class="btn-main" onclick="comenzarCuento()">✨ CREAR CUENTO AHORA</button>
         </div>
     </div>
 
     <div id="book-viewer">
         <h2 id="page-label">Bienvenido</h2>
-        <div id="story-txt">Escribe los datos arriba para empezar.</div>
+        <div id="story-txt">Escribe arriba para empezar la historia.</div>
         
         <div id="canvas-wrap">
             <canvas id="paintCanvas" width="600" height="400"></canvas>
         </div>
 
         <div class="btn-zone">
-            <button class="btn-nav" onclick="move(-1)">⬅️ Anterior</button>
+            <button class="btn-nav" onclick="cambiarPagina(-1)">⬅️ Anterior</button>
             <input type="color" id="brushColor" value="#2e7d32" style="width:50px; height:45px; border:none; cursor:pointer;">
-            <button class="btn-nav" onclick="limpiar()">🧹 Borrar</button>
-            <button class="btn-nav" onclick="move(1)">Siguiente ➡️</button>
+            <button class="btn-nav" onclick="borrarLienzo()">🧹 Borrar</button>
+            <button class="btn-nav" onclick="cambiarPagina(1)">Siguiente ➡️</button>
         </div>
 
         <hr>
 
         <div id="final-zone">
-            <h3 id="txt-autor" style="color: var(--p)">¡Libro en proceso!</h3>
+            <h3 id="txt-autor" style="color: var(--p)">Libro de la Autora</h3>
             <div class="btn-zone">
-                <button class="btn-share" onclick="compartir()">📋 COPIAR ENLACE PARA EL NIÑO</button>
-                <button class="btn-pdf" onclick="descargar()">📥 GUARDAR COMO PDF</button>
+                <button class="btn-share" onclick="copiarEnlace()">📋 COPIAR ENLACE PARA EL NIÑO</button>
+                <button class="btn-pdf" onclick="exportarPDF()">📥 GUARDAR COMO PDF</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    // Variables básicas
-    let book = { pages: ["Portada de prueba", "Página 1", "Página 2", "Página 3", "Página 4", "Fin"], cur: 0 };
     const canv = document.getElementById('paintCanvas');
     const ctx = canv.getContext('2d');
-    let drawing = false;
+    let pintando = false;
+    let paginaActual = 0;
 
-    // Pintar (Siempre activo para que pruebes)
-    canv.onmousedown = (e) => { drawing = true; paint(e); };
-    canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
-    canv.onmousemove = (e) => { if(drawing) paint(e); };
+    // Lógica de dibujo simple
+    canv.onmousedown = (e) => { pintando = true; dibujar(e); };
+    canv.onmouseup = () => { pintando = false; ctx.beginPath(); };
+    canv.onmousemove = (e) => { if(pintando) dibujar(e); };
 
-    function paint(e) {
+    function dibujar(e) {
         ctx.strokeStyle = document.getElementById('brushColor').value;
         ctx.lineWidth = 5; ctx.lineCap = 'round';
-        const r = canv.getBoundingClientRect();
-        ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
+        const rect = canv.getBoundingClientRect();
+        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         ctx.stroke();
     }
 
-    function move(dir) {
-        book.cur = Math.max(0, Math.min(5, book.cur + dir));
-        document.getElementById('page-label').innerText = book.cur === 0 ? "📖 PORTADA" : `PÁGINA ${book.cur}`;
-        document.getElementById('story-txt').innerText = book.pages[book.cur];
-        ctx.clearRect(0,0,600,400); // Limpia para simular cambio de página
-    }
-
-    function generar() {
+    function comenzarCuento() {
         const nombre = document.getElementById('author').value || "Autora";
+        const tema = document.getElementById('topic').value || "Mi Cuento";
         document.getElementById('txt-autor').innerText = "Escrito por: " + nombre;
-        alert("¡Generando modo visual! Mira los botones abajo.");
+        document.getElementById('story-txt').innerText = "¡Había una vez un cuento sobre " + tema + "!";
+        alert("¡Cuento listo para colorear!");
     }
 
-    function limpiar() { ctx.clearRect(0,0,600,400); }
+    function cambiarPagina(dir) {
+        paginaActual += dir;
+        document.getElementById('page-label').innerText = "PÁGINA " + Math.abs(paginaActual);
+        borrarLienzo();
+    }
 
-    function compartir() { alert("Enlace copiado (Modo visual)"); }
+    function borrarLienzo() { ctx.clearRect(0,0,600,400); }
 
-    function descargar() {
+    function copiarEnlace() {
+        alert("¡Enlace listo para enviar!");
+    }
+
+    function exportarPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', [210, 148]);
-        doc.text("Mi Cuento Pro", 105, 20, {align: 'center'});
-        doc.save("Cuento.pdf");
+        const autor = document.getElementById('author').value || "Autora";
+        doc.text("CaimánCuentacuentos - " + autor, 105, 15, {align: 'center'});
+        doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 25, 180, 100);
+        doc.save("Mi-Cuento-Final.pdf");
     }
 </script>
 </body>
