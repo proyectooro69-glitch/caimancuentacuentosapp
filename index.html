@@ -67,6 +67,7 @@
 </div>
 
 <script>
+    // LLAVES ACTUALIZADAS
     const G_KEY = "AIzaSyANHfYhYRkoHZ4WfwqpPFOKxE-YeRkyfQw";
     const H_TOKEN = "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";
 
@@ -98,7 +99,8 @@
         btn.disabled = true;
 
         try {
-            const prompt = `Escribe un cuento infantil corto sobre ${topic}. Dividido en 5 escenas. Devuelve UNICAMENTE un JSON: {"titulo": "Título", "escenas": ["e1", "e2", "e3", "e4", "e5"]}`;
+            // 1. Generar Historia
+            const prompt = `Escribe un cuento infantil sobre ${topic}. 5 escenas. Devuelve JSON: {"titulo": "T", "escenas": ["e1", "e2", "e3", "e4", "e5"]}`;
             const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
                 method:"POST", headers:{"Content-Type":"application/json"},
                 body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})
@@ -111,23 +113,24 @@
             book.pages = [parsed.titulo, ...parsed.escenas];
             book.images = [];
 
+            // 2. Generar Imágenes
             for(let i=0; i<6; i++) {
                 loader.innerText = `🖌️ Dibujando imagen ${i+1} de 6...`;
-                const style = (i===0) ? "Pixar style, colorful" : "Coloring book, black and white, simple lines";
+                const style = (i===0) ? "Pixar art, colorful" : "Coloring book, black and white";
                 const blob = await queryHuggingFace({inputs: `${style}, ${book.pages[i]}`});
                 book.images.push(await new Promise(r => {
                     const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob);
                 }));
             }
 
-            // ACTIVAR VISIBILIDAD DE CONTROLES Y BOTONES
+            // 3. ACTIVAR TODO
             loader.style.display = "none";
             document.getElementById('nav-controls').style.display = 'flex';
-            document.getElementById('author-zone').style.display = 'block'; // AQUÍ SE ACTIVAN LOS BOTONES
+            document.getElementById('author-zone').style.display = 'block'; // Activa botones compartir/PDF
             showPage(0);
             
         } catch (e) { 
-            alert("Error. Revisa tus llaves.");
+            alert("¡Ups! Error de conexión. Revisa que las llaves estén activas en GitHub.");
             loader.style.display = "none";
             btn.disabled = false;
         }
@@ -147,7 +150,7 @@
         if(n >= 0 && n < 6) showPage(n);
     }
 
-    // Dibujo
+    // Funciones de dibujo
     canv.onmousedown = (e) => { if(cur!==0) { drawing = true; paint(e); } };
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
@@ -166,15 +169,15 @@
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(book))));
         const url = window.location.href.split('?')[0] + "?data=" + encoded;
         navigator.clipboard.writeText(url);
-        alert("¡Enlace copiado! Pégalo donde quieras.");
+        alert("¡Enlace copiado!");
     }
 
     function savePDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', [210, 148]);
-        doc.text(book.title, 105, 20, {align: 'center'});
-        doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 30, 180, 100);
-        doc.save(`Mi-Cuento.pdf`);
+        doc.text(book.title, 105, 15, {align: 'center'});
+        doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 25, 180, 100);
+        doc.save(`Cuento-${book.title}.pdf`);
     }
 </script>
 </body>
