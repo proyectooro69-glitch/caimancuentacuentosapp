@@ -67,9 +67,9 @@
 </div>
 
 <script>
-    // TUS LLAVES (Verificadas)
-    const G_KEY = "AIzaSyAM30mJ_heYlniYwoLR2McqfzjekM7cWcY";
-    const H_TOKEN = "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";
+    // TUS LLAVES ACTUALIZADAS
+    const G_KEY = "AIzaSyANHfYhYRkoHZ4WfwqpPFOKxE-YeRkyfQw";
+    const H_TOKEN = "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";
 
     let book = { title: "", pages: [], images: [] };
     let cur = 0;
@@ -95,7 +95,7 @@
                 method:"POST", headers:{"Authorization":`Bearer ${H_TOKEN}`},
                 body: JSON.stringify(payload)
             });
-            if (res.status === 503) { // El modelo está cargando
+            if (res.status === 503) { 
                 await new Promise(r => setTimeout(r, 5000));
                 retries--;
                 continue;
@@ -176,7 +176,6 @@
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
     
-    // Soporte para tablets/celulares
     canv.ontouchstart = (e) => { if(cur!==0) { drawing = true; startPaint(e.touches[0]); e.preventDefault(); } };
     canv.ontouchend = () => { drawing = false; ctx.beginPath(); };
     canv.ontouchmove = (e) => { if(drawing) { paint(e.touches[0]); e.preventDefault(); } };
@@ -206,7 +205,7 @@
 
     function savePDF() {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('l', 'mm', [210, 148]); // Formato A5 horizontal
+        const doc = new jsPDF('l', 'mm', [210, 148]); 
         doc.setFont("helvetica", "bold");
         doc.text(book.title, 105, 20, {align: 'center'});
         doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 30, 180, 100);
