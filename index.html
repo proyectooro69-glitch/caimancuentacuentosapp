@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CaimánCuentacuentos Pro 🐊</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root { --p: #2e7d32; --s: #ffa000; --blue: #1565c0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f1f8e9; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .card { max-width: 750px; width: 100%; background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; }
+        h1 { color: var(--p); font-size: 2.5em; margin-bottom: 5px; }
+        .input-group { margin: 20px 0; }
+        input[type="text"] { width: 80%; padding: 15px; border-radius: 15px; border: 2px solid #ddd; outline: none; }
+        #canvas-wrap { border: 5px solid var(--p); border-radius: 20px; margin: 20px 0; background: white; overflow: hidden; }
+        canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; }
+        .btn-zone { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 20px; }
+        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; color: white; }
+        .btn-main { background: var(--p); font-size: 1.1em; }
+        .btn-nav { background: #555; }
+        .btn-share { background: var(--blue); }
+        .btn-pdf { background: var(--s); color: #333; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #story-txt { font-size: 1.3em; margin: 20px 0; color: #444; min-height: 60px; line-height: 1.4; }
+        .status { color: #d32f2f; font-weight: bold; margin: 10px 0; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>🐊 CaimánCuentacuentos</h1>
+    
+    <div class="input-group">
+        <input type="text" id="topic" placeholder="Escribe el tema del cuento aquí...">
+        <div class="btn-zone">
+            <button class="btn-main" onclick="buildFullStory()">✨ CREAR CUENTO Y PORTADA</button>
+        </div>
+    </div>
+
+    <div id="loader" class="status">🎨 Creando historia y dibujos... Espera un momento.</div>
+
+    <div id="book-viewer">
+        <h2 id="page-label">Portada</h2>
+        <div id="story-txt">Elige un tema arriba para empezar la magia...</div>
+        
+        <div id="canvas-wrap">
+            <canvas id="paintCanvas" width="600" height="400"></canvas>
+        </div>
+
+        <div class="btn-zone">
+            <button class="btn-nav" id="prevBtn" onclick="move(-1)" disabled>⬅️ Anterior</button>
+            <button class="btn-nav" id="nextBtn" onclick="move(1)" disabled>Siguiente ➡️</button>
+            <input type="color" id="brushColor" value="#2e7d32" style="width:50px; height:45px; border-radius:10px; border:none;">
+            <button class="btn-nav" onclick="clearC()">🧹 Borrar</button>
+        </div>
+
+        <hr style="margin:30px 0; border:1px solid #eee;">
+
+        <h3>📤 Opciones de Envío y Descarga:</h3>
+        <div class="btn-zone">
+            <button class="btn-share" id="shareBtn" onclick="copyLink()" disabled>📋 COPIAR ENLACE PARA EL NIÑO</button>
+            <button class="btn-pdf" id="pdfBtn" onclick="savePDF()" disabled>📥 DESCARGAR LIBRO EN PDF</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // COLOCA TUS LLAVES AQUÍ
+    const G_KEY = AIzaSyAM30mJ_heYlniYwoLR2McqfzjekM7cWcY;
+    const H_TOKEN = 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;
+
+    let book = { title: "", pages: [], images: [] };
+    let cur = 0;
+    const canv = document.getElementById('paintCanvas');
+    const ctx = canv.getContext('2d');
+    let drawing = false;
+
+    // Detectar si venimos de un link compartido
+    window.onload = () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('data')) {
+            book = JSON.parse(atob(params.get('data')));
+            document.querySelector('.input-group').style.display = 'none';
+            document.querySelector('h3').style.display = 'none';
+            document.getElementById('shareBtn').style.display = 'none';
+            startReading();
+        }
+    };
+
+    async function buildFullStory() {
+        const topic = document.getElementById('topic').value;
+        if(!topic) return alert("Por favor escribe un tema");
+        
+        const loader = document.getElementById('loader');
+        loader.style.display = "block";
+
+        try {
+            // 1. Gemini: Historia
+            const prompt = `Escribe un cuento infantil de 5 escenas sobre ${topic}. Devuelve SOLO un JSON: {"titulo": "...", "escenas": ["e1", "e2", "e3", "e4", "e5"]}`;
+            const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
+                method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+            });
+            const gData = await gRes.json();
+            const parsed = JSON.parse(gData.candidates[0].content.parts[0].text.replace(/```json|```/g, ""));
+            
+            book.title = parsed.titulo;
+            book.pages = [parsed.titulo, ...parsed.escenas];
+
+            // 2. HuggingFace: Imágenes
+            book.images = [];
+            for(let i=0; i<6; i++) {
+                const style = (i===0) ? "Colorful 3D Pixar style, vibrant" : "Coloring book, black and white, simple lines";
+                const imgRes = await fetch("https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5", {
+                    method:"POST", headers:{"Authorization":`Bearer ${H_TOKEN}`},
+                    body: JSON.stringify({inputs: `${style}, ${book.pages[i]}`})
+                });
+                const blob = await imgRes.blob();
+                book.images.push(await new Promise(r => {
+                    const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob);
+                }));
+            }
+
+            loader.style.display = "none";
+            startReading();
+            
+            // Activar botones de compartir y PDF
+            document.getElementById('shareBtn').disabled = false;
+            document.getElementById('pdfBtn').disabled = false;
+            
+        } catch (e) { 
+            alert("Error de conexión. Verifica tus API Keys.");
+            loader.style.display = "none";
+        }
+    }
+
+    function startReading() {
+        document.getElementById('prevBtn').disabled = false;
+        document.getElementById('nextBtn').disabled = false;
+        document.getElementById('pdfBtn').disabled = false;
+        showPage(0);
+    }
+
+    function showPage(idx) {
+        cur = idx;
+        document.getElementById('page-label').innerText = (idx === 0) ? "📖 PORTADA" : `PÁGINA ${idx} DE 5`;
+        document.getElementById('story-txt').innerText = book.pages[idx];
+        const img = new Image();
+        img.onload = () => { ctx.clearRect(0,0,600,400); ctx.drawImage(img,0,0,600,400); };
+        img.src = book.images[idx];
+    }
+
+    function move(dir) {
+        let n = cur + dir;
+        if(n >= 0 && n < 6) showPage(n);
+    }
+
+    // PINTAR
+    canv.onmousedown = () => { if(cur!==0) drawing = true; };
+    canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
+    canv.onmousemove = (e) => {
+        if(!drawing) return;
+        ctx.strokeStyle = document.getElementById('brushColor').value;
+        ctx.lineWidth = 5; ctx.lineCap = 'round';
+        const r = canv.getBoundingClientRect();
+        ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
+        ctx.stroke();
+    };
+
+    function clearC() { showPage(cur); }
+
+    function copyLink() {
+        const encoded = btoa(JSON.stringify(book));
+        const url = window.location.href.split('?')[0] + "?data=" + encoded;
+        navigator.clipboard.writeText(url);
+        alert("¡Enlace copiado! Ya puedes pegarlo en WhatsApp y enviárselo al niño.");
+    }
+
+    function savePDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.text(book.title, 10, 10);
+        doc.addImage(canv.toDataURL("image/png"), 'PNG', 10, 30, 180, 120);
+        doc.save("Mi-Cuento-Caiman.pdf");
+    }
+</script>
+</body>
+</html>
