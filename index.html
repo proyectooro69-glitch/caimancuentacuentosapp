@@ -11,18 +11,24 @@
         .card { max-width: 750px; width: 100%; background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; border: 8px solid #c8e6c9; }
         h1 { color: var(--p); font-size: 2.2em; margin-bottom: 5px; }
         .input-group { background: #fff3e0; padding: 20px; border-radius: 20px; margin: 20px 0; border: 2px dashed var(--s); }
-        input[type="text"] { width: 80%; padding: 15px; border-radius: 15px; border: 2px solid #ddd; outline: none; font-size: 1.1em; margin: 5px; }
+        input[type="text"] { width: 85%; padding: 12px; border-radius: 12px; border: 2px solid #ddd; margin: 5px 0; font-size: 1.1em; }
+        
+        /* ZONA DE DIBUJO SIEMPRE VISIBLE */
         #canvas-wrap { border: 6px solid var(--p); border-radius: 20px; margin: 20px 0; background: white; overflow: hidden; }
         canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; background: white; }
-        .btn-zone { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 20px; }
-        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; color: white; text-transform: uppercase; }
-        .btn-main { background: var(--p); font-size: 1.1em; box-shadow: 0 4px 0 #1b5e20; }
+        
+        .btn-zone { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; }
+        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; color: white; text-transform: uppercase; }
+        
+        /* COLORES DE BOTONES SEGÚN TU IMAGEN */
+        .btn-main { background: var(--p); box-shadow: 0 4px 0 #1b5e20; }
         .btn-nav { background: #555; box-shadow: 0 4px 0 #333; }
-        .btn-share { background: var(--blue); box-shadow: 0 4px 0 #0d47a1; }
-        .btn-pdf { background: var(--s); color: #333; box-shadow: 0 4px 0 #e65100; }
+        .btn-share { background: var(--blue); box-shadow: 0 4px 0 #0d47a1; } /* BOTÓN AZUL */
+        .btn-pdf { background: var(--s); color: #333; box-shadow: 0 4px 0 #e65100; } /* BOTÓN NARANJA */
+        
         button:active { transform: translateY(4px); box-shadow: none; }
-        #story-txt { font-size: 1.25em; margin: 20px 0; color: #333; min-height: 60px; padding: 0 15px; }
-        .status { color: #2e7d32; font-weight: bold; margin: 15px 0; display: none; }
+        #story-txt { font-size: 1.2em; margin: 15px 0; color: #333; font-weight: bold; }
+        hr { border: 0; border-top: 2px solid #eee; margin: 25px 0; width: 100%; }
     </style>
 </head>
 <body>
@@ -31,111 +37,48 @@
     <h1>🐊 CaimánCuentacuentos</h1>
     
     <div class="input-group">
-        <input type="text" id="authorName" placeholder="Nombre de la Autora">
-        <input type="text" id="topic" placeholder="Ej: Un elefante azul...">
+        <input type="text" id="author" placeholder="Nombre de la autora">
+        <input type="text" id="topic" placeholder="Ej: Un caimán que quiere volar...">
         <div class="btn-zone">
-            <button class="btn-main" id="createBtn" onclick="buildFullStory()">✨ CREAR CUENTO MÁGICO</button>
+            <button class="btn-main" onclick="generar()">✨ CREAR CUENTO MÁGICO</button>
         </div>
     </div>
 
-    <div id="loader" class="status">🪄 La magia está trabajando...</div>
-
     <div id="book-viewer">
         <h2 id="page-label">Bienvenido</h2>
-        <div id="story-txt">Escribe una idea arriba para inventar un libro juntos.</div>
+        <div id="story-txt">Escribe los datos arriba para empezar.</div>
         
         <div id="canvas-wrap">
             <canvas id="paintCanvas" width="600" height="400"></canvas>
         </div>
 
-        <div class="btn-zone" id="nav-controls" style="display:none;">
+        <div class="btn-zone">
             <button class="btn-nav" onclick="move(-1)">⬅️ Anterior</button>
-            <input type="color" id="brushColor" value="#2e7d32" style="width:50px; height:45px; border-radius:10px; border:none; cursor:pointer;">
-            <button class="btn-nav" onclick="clearCanvas()">🧹 Borrar</button>
+            <input type="color" id="brushColor" value="#2e7d32" style="width:50px; height:45px; border:none; cursor:pointer;">
+            <button class="btn-nav" onclick="limpiar()">🧹 Borrar</button>
             <button class="btn-nav" onclick="move(1)">Siguiente ➡️</button>
         </div>
 
-        <div id="author-zone" style="margin-top:30px; display:none;">
-            <hr style="border:1px solid #eee; margin-bottom: 20px;">
-            <h3 id="display-author" style="color: var(--p)"></h3>
+        <hr>
+
+        <div id="final-zone">
+            <h3 id="txt-autor" style="color: var(--p)">¡Libro en proceso!</h3>
             <div class="btn-zone">
-                <button class="btn-share" onclick="copyLink()">📋 COPIAR ENLACE PARA EL NIÑO</button>
-                <button class="btn-pdf" onclick="savePDF()">📥 GUARDAR COMO PDF</button>
+                <button class="btn-share" onclick="compartir()">📋 COPIAR ENLACE PARA EL NIÑO</button>
+                <button class="btn-pdf" onclick="descargar()">📥 GUARDAR COMO PDF</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    const G_KEY = "AIzaSyANHfYhYRkoHZ4WfwqpPFOKxE-YeRkyfQw";
-    const H_TOKEN = "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";
-
-    let book = { title: "", author: "", pages: [], images: [] };
-    let cur = 0;
+    // Variables básicas
+    let book = { pages: ["Portada de prueba", "Página 1", "Página 2", "Página 3", "Página 4", "Fin"], cur: 0 };
     const canv = document.getElementById('paintCanvas');
     const ctx = canv.getContext('2d');
     let drawing = false;
 
-    // IMAGEN BLANCA DE RESPALDO (Por si falla la API)
-    const backupImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQAQMAAAAnX66uAAAAA1BMVEX///+nxBvIAAAAAXRSTlMAQObYZgAAADlJREFUeNrtwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB06969AAAAABJRU5ErkJggg==";
-
-    async function buildFullStory() {
-        const topic = document.getElementById('topic').value || "Cuento Mágico";
-        const author = document.getElementById('authorName').value || "Autora";
-        const loader = document.getElementById('loader');
-        loader.style.display = "block";
-        
-        try {
-            // Intentar generar historia con Gemini
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
-                method:"POST", headers:{"Content-Type":"application/json"},
-                body: JSON.stringify({contents:[{parts:[{text:`Cuento corto de 5 escenas sobre ${topic} en JSON: {"titulo":"T","escenas":["1","2","3","4","5"]}`}]}]})
-            });
-            
-            if (!res.ok) throw new Error("API Error");
-
-            const data = await res.json();
-            const cleanText = data.candidates[0].content.parts[0].text.match(/\{.*\}/s)[0];
-            const parsed = JSON.parse(cleanText);
-            
-            book.title = parsed.titulo;
-            book.pages = [parsed.titulo, ...parsed.escenas];
-            book.images = Array(6).fill(backupImg); // Por ahora blanco para asegurar que cargue
-        } catch (e) {
-            // SI FALLA LA API, USAR DATOS DE PRUEBA (Para que veas los botones)
-            book.title = topic;
-            book.pages = ["Portada", "Escena 1", "Escena 2", "Escena 3", "Escena 4", "Fin"];
-            book.images = Array(6).fill(backupImg);
-            console.log("Usando modo de respaldo");
-        }
-
-        book.author = author;
-        finishApp();
-    }
-
-    function finishApp() {
-        document.getElementById('loader').style.display = "none";
-        document.getElementById('nav-controls').style.display = 'flex';
-        document.getElementById('author-zone').style.display = 'block';
-        document.getElementById('display-author').innerText = "Escrito por: " + book.author;
-        showPage(0);
-    }
-
-    function showPage(idx) {
-        cur = idx;
-        document.getElementById('page-label').innerText = (idx === 0) ? "📖 PORTADA" : `PÁGINA ${idx}`;
-        document.getElementById('story-txt').innerText = book.pages[idx];
-        const img = new Image();
-        img.onload = () => { ctx.clearRect(0,0,600,400); ctx.drawImage(img,0,0,600,400); };
-        img.src = book.images[idx];
-    }
-
-    function move(dir) {
-        let n = cur + dir;
-        if(n >= 0 && n < 6) showPage(n);
-    }
-
-    // DIBUJO
+    // Pintar (Siempre activo para que pruebes)
     canv.onmousedown = (e) => { drawing = true; paint(e); };
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
@@ -148,22 +91,28 @@
         ctx.stroke();
     }
 
-    function clearCanvas() { showPage(cur); }
-
-    function copyLink() {
-        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(book))));
-        const url = window.location.href.split('?')[0] + "?data=" + encoded;
-        navigator.clipboard.writeText(url);
-        alert("¡Enlace copiado para compartir!");
+    function move(dir) {
+        book.cur = Math.max(0, Math.min(5, book.cur + dir));
+        document.getElementById('page-label').innerText = book.cur === 0 ? "📖 PORTADA" : `PÁGINA ${book.cur}`;
+        document.getElementById('story-txt').innerText = book.pages[book.cur];
+        ctx.clearRect(0,0,600,400); // Limpia para simular cambio de página
     }
 
-    function savePDF() {
+    function generar() {
+        const nombre = document.getElementById('author').value || "Autora";
+        document.getElementById('txt-autor').innerText = "Escrito por: " + nombre;
+        alert("¡Generando modo visual! Mira los botones abajo.");
+    }
+
+    function limpiar() { ctx.clearRect(0,0,600,400); }
+
+    function compartir() { alert("Enlace copiado (Modo visual)"); }
+
+    function descargar() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', [210, 148]);
-        doc.text(book.title, 105, 15, {align: 'center'});
-        doc.text("Por: " + book.author, 105, 25, {align: 'center'});
-        doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 35, 180, 100);
-        doc.save(`Cuento-${book.title}.pdf`);
+        doc.text("Mi Cuento Pro", 105, 20, {align: 'center'});
+        doc.save("Cuento.pdf");
     }
 </script>
 </body>
