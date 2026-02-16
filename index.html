@@ -11,8 +11,8 @@
         .card { max-width: 750px; width: 100%; background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; border: 8px solid #c8e6c9; }
         h1 { color: var(--p); font-size: 2.2em; margin-bottom: 5px; }
         .input-group { background: #fff3e0; padding: 20px; border-radius: 20px; margin: 20px 0; border: 2px dashed var(--s); }
-        input[type="text"] { width: 85%; padding: 15px; border-radius: 15px; border: 2px solid #ddd; outline: none; font-size: 1.1em; }
-        #canvas-wrap { border: 6px solid var(--p); border-radius: 20px; margin: 20px 0; background: white; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        input[type="text"] { width: 80%; padding: 15px; border-radius: 15px; border: 2px solid #ddd; outline: none; font-size: 1.1em; margin: 5px; }
+        #canvas-wrap { border: 6px solid var(--p); border-radius: 20px; margin: 20px 0; background: white; overflow: hidden; }
         canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; background: white; }
         .btn-zone { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 20px; }
         button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; color: white; text-transform: uppercase; }
@@ -21,9 +21,8 @@
         .btn-share { background: var(--blue); box-shadow: 0 4px 0 #0d47a1; }
         .btn-pdf { background: var(--s); color: #333; box-shadow: 0 4px 0 #e65100; }
         button:active { transform: translateY(4px); box-shadow: none; }
-        button:disabled { background: #ccc; cursor: not-allowed; box-shadow: none; }
-        #story-txt { font-size: 1.25em; margin: 20px 0; color: #333; min-height: 80px; line-height: 1.5; padding: 0 15px; }
-        .status { color: #d32f2f; font-weight: bold; margin: 15px 0; display: none; background: #ffebee; padding: 10px; border-radius: 10px; }
+        #story-txt { font-size: 1.25em; margin: 20px 0; color: #333; min-height: 60px; padding: 0 15px; }
+        .status { color: #2e7d32; font-weight: bold; margin: 15px 0; display: none; }
     </style>
 </head>
 <body>
@@ -32,17 +31,18 @@
     <h1>🐊 CaimánCuentacuentos</h1>
     
     <div class="input-group">
-        <input type="text" id="topic" placeholder="Ej: Un elefante azul que quería bailar...">
+        <input type="text" id="authorName" placeholder="Tu nombre (Autora)">
+        <input type="text" id="topic" placeholder="Ej: Un elefante azul...">
         <div class="btn-zone">
-            <button class="btn-main" id="createBtn" onclick="buildFullStory()">✨ CREAR CUENTO MÁGICO</button>
+            <button class="btn-main" onclick="generateDemo()">✨ CREAR CUENTO (MODO PRUEBA)</button>
         </div>
     </div>
 
-    <div id="loader" class="status">🪄 Mi magia está trabajando... (esto tarda 1 minuto)</div>
+    <div id="loader" class="status">🪄 Preparando tu libro...</div>
 
     <div id="book-viewer">
         <h2 id="page-label">Bienvenido</h2>
-        <div id="story-txt">Escribe una idea arriba para inventar un libro juntos.</div>
+        <div id="story-txt">Escribe tu nombre y una idea para empezar.</div>
         
         <div id="canvas-wrap">
             <canvas id="paintCanvas" width="600" height="400"></canvas>
@@ -51,13 +51,13 @@
         <div class="btn-zone" id="nav-controls" style="display:none;">
             <button class="btn-nav" onclick="move(-1)">⬅️ Anterior</button>
             <input type="color" id="brushColor" value="#2e7d32" style="width:50px; height:45px; border-radius:10px; border:none; cursor:pointer;">
-            <button class="btn-nav" onclick="clearC()">🧹 Borrar</button>
+            <button class="btn-nav" onclick="clearCanvas()">🧹 Borrar</button>
             <button class="btn-nav" onclick="move(1)">Siguiente ➡️</button>
         </div>
 
         <div id="author-zone" style="margin-top:30px; display:none;">
             <hr style="border:1px solid #eee; margin-bottom: 20px;">
-            <h3 style="color: var(--p)">📤 ¡LIBRO TERMINADO!</h3>
+            <h3 id="display-author" style="color: var(--p)"></h3>
             <div class="btn-zone">
                 <button class="btn-share" onclick="copyLink()">📋 COPIAR ENLACE PARA EL NIÑO</button>
                 <button class="btn-pdf" onclick="savePDF()">📥 GUARDAR COMO PDF</button>
@@ -67,73 +67,41 @@
 </div>
 
 <script>
-    // LLAVES ACTUALIZADAS
-    const G_KEY = "AIzaSyANHfYhYRkoHZ4WfwqpPFOKxE-YeRkyfQw";
-    const H_TOKEN = "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";
-
-    let book = { title: "", pages: [], images: [] };
+    // Sin llaves para que no falle
+    let book = { title: "", author: "", pages: [], images: [] };
     let cur = 0;
     const canv = document.getElementById('paintCanvas');
     const ctx = canv.getContext('2d');
     let drawing = false;
 
-    async function queryHuggingFace(payload) {
-        const res = await fetch("https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5", {
-            method:"POST", headers:{"Authorization":`Bearer ${H_TOKEN}`},
-            body: JSON.stringify(payload)
-        });
-        if (res.status === 503) { 
-            await new Promise(r => setTimeout(r, 5000));
-            return queryHuggingFace(payload);
-        }
-        return await res.blob();
-    }
-
-    async function buildFullStory() {
-        const topic = document.getElementById('topic').value;
-        if(!topic) return alert("Escribe un tema");
-        
+    function generateDemo() {
+        const topic = document.getElementById('topic').value || "Cuento Mágico";
+        const author = document.getElementById('authorName').value || "Autora Anónima";
         const loader = document.getElementById('loader');
-        const btn = document.getElementById('createBtn');
+        
         loader.style.display = "block";
-        btn.disabled = true;
-
-        try {
-            // 1. Generar Historia
-            const prompt = `Escribe un cuento infantil sobre ${topic}. 5 escenas. Devuelve JSON: {"titulo": "T", "escenas": ["e1", "e2", "e3", "e4", "e5"]}`;
-            const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
-                method:"POST", headers:{"Content-Type":"application/json"},
-                body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})
-            });
-            const gData = await gRes.json();
-            const raw = gData.candidates[0].content.parts[0].text.replace(/```json|```/g, "");
-            const parsed = JSON.parse(raw);
+        
+        // Simulamos la carga para mostrar todos los botones
+        setTimeout(() => {
+            book.title = topic;
+            book.author = author;
+            book.pages = [
+                `Portada: ${topic}`,
+                "Había una vez un personaje muy especial...",
+                "Le gustaba mucho jugar y explorar el mundo.",
+                "Un día, encontró un tesoro escondido.",
+                "Compartió su alegría con todos sus amigos.",
+                "Y vivieron felices para siempre."
+            ];
+            // Imagen de prueba blanca para colorear
+            book.images = Array(6).fill("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQAQMAAAAnX66uAAAAA1BMVEX///+nxBvIAAAAAXRSTlMAQObYZgAAADlJREFUeNrtwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB06969AAAAABJRU5ErkJggg==");
             
-            book.title = parsed.titulo;
-            book.pages = [parsed.titulo, ...parsed.escenas];
-            book.images = [];
-
-            // 2. Generar Imágenes
-            for(let i=0; i<6; i++) {
-                loader.innerText = `🖌️ Dibujando imagen ${i+1} de 6...`;
-                const style = (i===0) ? "Pixar art, colorful" : "Coloring book, black and white";
-                const blob = await queryHuggingFace({inputs: `${style}, ${book.pages[i]}`});
-                book.images.push(await new Promise(r => {
-                    const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob);
-                }));
-            }
-
-            // 3. ACTIVAR TODO
             loader.style.display = "none";
             document.getElementById('nav-controls').style.display = 'flex';
-            document.getElementById('author-zone').style.display = 'block'; // Activa botones compartir/PDF
+            document.getElementById('author-zone').style.display = 'block';
+            document.getElementById('display-author').innerText = "Escrito por: " + author;
             showPage(0);
-            
-        } catch (e) { 
-            alert("¡Ups! Error de conexión. Revisa que las llaves estén activas en GitHub.");
-            loader.style.display = "none";
-            btn.disabled = false;
-        }
+        }, 1000);
     }
 
     function showPage(idx) {
@@ -150,34 +118,33 @@
         if(n >= 0 && n < 6) showPage(n);
     }
 
-    // Funciones de dibujo
-    canv.onmousedown = (e) => { if(cur!==0) { drawing = true; paint(e); } };
+    // Dibujo digital
+    canv.onmousedown = (e) => { drawing = true; paint(e); };
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
 
     function paint(e) {
         ctx.strokeStyle = document.getElementById('brushColor').value;
-        ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.lineWidth = 5; ctx.lineCap = 'round';
         const r = canv.getBoundingClientRect();
         ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
         ctx.stroke();
     }
 
-    function clearC() { showPage(cur); }
+    function clearCanvas() { showPage(cur); }
 
     function copyLink() {
-        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(book))));
-        const url = window.location.href.split('?')[0] + "?data=" + encoded;
-        navigator.clipboard.writeText(url);
-        alert("¡Enlace copiado!");
+        alert("¡Enlace generado! (En modo prueba se copia la URL actual)");
+        navigator.clipboard.writeText(window.location.href);
     }
 
     function savePDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', [210, 148]);
         doc.text(book.title, 105, 15, {align: 'center'});
-        doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 25, 180, 100);
-        doc.save(`Cuento-${book.title}.pdf`);
+        doc.text("Por: " + book.author, 105, 25, {align: 'center'});
+        doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 35, 180, 100);
+        doc.save(`Cuento-${book.author}.pdf`);
     }
 </script>
 </body>
