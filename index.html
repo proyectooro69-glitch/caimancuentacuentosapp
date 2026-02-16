@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root { --p: #2e7d32; --s: #ffa000; --blue: #1565c0; }
-        body { font-family: 'Comic Sans MS', 'Chalkboard SE', cursive, sans-serif; background: #e8f5e9; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        body { font-family: 'Comic Sans MS', cursive, sans-serif; background: #e8f5e9; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .card { max-width: 750px; width: 100%; background: white; padding: 30px; border-radius: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; border: 8px solid #c8e6c9; }
         h1 { color: var(--p); font-size: 2.2em; margin-bottom: 5px; }
         .input-group { background: #fff3e0; padding: 20px; border-radius: 20px; margin: 20px 0; border: 2px dashed var(--s); }
@@ -15,14 +15,14 @@
         #canvas-wrap { border: 6px solid var(--p); border-radius: 20px; margin: 20px 0; background: white; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; background: white; }
         .btn-zone { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 20px; }
-        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; color: white; text-transform: uppercase; box-shadow: 0 4px 0 #1b5e20; }
-        button:active { transform: translateY(4px); box-shadow: none; }
-        .btn-main { background: var(--p); font-size: 1.1em; }
+        button { padding: 12px 25px; border-radius: 50px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; color: white; text-transform: uppercase; }
+        .btn-main { background: var(--p); font-size: 1.1em; box-shadow: 0 4px 0 #1b5e20; }
         .btn-nav { background: #555; box-shadow: 0 4px 0 #333; }
         .btn-share { background: var(--blue); box-shadow: 0 4px 0 #0d47a1; }
         .btn-pdf { background: var(--s); color: #333; box-shadow: 0 4px 0 #e65100; }
+        button:active { transform: translateY(4px); box-shadow: none; }
         button:disabled { background: #ccc; cursor: not-allowed; box-shadow: none; }
-        #story-txt { font-size: 1.25em; margin: 20px 0; color: #333; min-height: 80px; line-height: 1.5; padding: 0 15px; font-weight: 500; }
+        #story-txt { font-size: 1.25em; margin: 20px 0; color: #333; min-height: 80px; line-height: 1.5; padding: 0 15px; }
         .status { color: #d32f2f; font-weight: bold; margin: 15px 0; display: none; background: #ffebee; padding: 10px; border-radius: 10px; }
     </style>
 </head>
@@ -32,7 +32,7 @@
     <h1>🐊 CaimánCuentacuentos</h1>
     
     <div class="input-group">
-        <input type="text" id="topic" placeholder="Ej: Un caimán que quiere volar...">
+        <input type="text" id="topic" placeholder="Ej: Un elefante azul que quería bailar...">
         <div class="btn-zone">
             <button class="btn-main" id="createBtn" onclick="buildFullStory()">✨ CREAR CUENTO MÁGICO</button>
         </div>
@@ -77,6 +77,7 @@
     const ctx = canv.getContext('2d');
     let drawing = false;
 
+    // Detectar si venimos de un enlace compartido
     window.onload = () => {
         const params = new URLSearchParams(window.location.search);
         if (params.has('data')) {
@@ -84,29 +85,25 @@
                 book = JSON.parse(atob(params.get('data')));
                 document.querySelector('.input-group').style.display = 'none';
                 startReading();
-            } catch(e) { console.error("Error cargando link"); }
+            } catch(e) { console.error("Error cargando datos"); }
         }
     };
 
     async function queryHuggingFace(payload) {
-        let retries = 3;
-        while(retries > 0) {
-            const res = await fetch("https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5", {
-                method:"POST", headers:{"Authorization":`Bearer ${H_TOKEN}`},
-                body: JSON.stringify(payload)
-            });
-            if (res.status === 503) { 
-                await new Promise(r => setTimeout(r, 5000));
-                retries--;
-                continue;
-            }
-            return await res.blob();
+        const res = await fetch("https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5", {
+            method:"POST", headers:{"Authorization":`Bearer ${H_TOKEN}`},
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 503) { // El modelo está cargando
+            await new Promise(r => setTimeout(r, 5000));
+            return queryHuggingFace(payload);
         }
+        return await res.blob();
     }
 
     async function buildFullStory() {
         const topic = document.getElementById('topic').value;
-        if(!topic) return alert("¡Pon una idea para el cuento!");
+        if(!topic) return alert("Escribe un tema");
         
         const loader = document.getElementById('loader');
         const btn = document.getElementById('createBtn');
@@ -114,27 +111,25 @@
         btn.disabled = true;
 
         try {
-            // 1. Gemini
-            const prompt = `Escribe un cuento infantil corto sobre ${topic}. Dividido en 5 escenas. Devuelve un JSON estrictamente así: {"titulo": "Título corto", "escenas": ["escena 1", "escena 2", "escena 3", "escena 4", "escena 5"]}`;
+            // 1. Gemini: Generar historia
+            const prompt = `Escribe un cuento infantil corto sobre ${topic}. Dividido en 5 escenas. Devuelve UNICAMENTE un JSON: {"titulo": "Título", "escenas": ["e1", "e2", "e3", "e4", "e5"]}`;
             const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
                 method:"POST", headers:{"Content-Type":"application/json"},
                 body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})
             });
             const gData = await gRes.json();
-            let rawText = gData.candidates[0].content.parts[0].text;
-            const cleanJson = rawText.match(/\{.*\}/s)[0];
-            const parsed = JSON.parse(cleanJson);
+            const raw = gData.candidates[0].content.parts[0].text.replace(/```json|```/g, "");
+            const parsed = JSON.parse(raw);
             
             book.title = parsed.titulo;
             book.pages = [parsed.titulo, ...parsed.escenas];
             book.images = [];
 
-            // 2. Imágenes
+            // 2. HuggingFace: Dibujar escenas
             for(let i=0; i<6; i++) {
                 loader.innerText = `🖌️ Dibujando imagen ${i+1} de 6...`;
-                const style = (i===0) ? "Digital art, Pixar style, colorful, cute" : "Coloring book style, black and white, thick lines, simple for kids";
+                const style = (i===0) ? "Pixar style, colorful, 3d render" : "Coloring book, black and white, simple lines";
                 const blob = await queryHuggingFace({inputs: `${style}, ${book.pages[i]}`});
-                
                 book.images.push(await new Promise(r => {
                     const rd = new FileReader(); rd.onloadend = () => r(rd.result); rd.readAsDataURL(blob);
                 }));
@@ -145,8 +140,7 @@
             document.getElementById('author-zone').style.display = 'block';
             
         } catch (e) { 
-            console.error(e);
-            alert("¡Ups! Hubo un problema. Revisa que tus llaves estén activas.");
+            alert("¡Ups! Error de conexión. Revisa que las llaves estén activas en la consola.");
             loader.style.display = "none";
             btn.disabled = false;
         }
@@ -171,20 +165,10 @@
         if(n >= 0 && n < 6) showPage(n);
     }
 
-    // PINTAR
-    canv.onmousedown = (e) => { if(cur!==0) { drawing = true; startPaint(e); } };
+    // Funciones de dibujo
+    canv.onmousedown = (e) => { if(cur!==0) { drawing = true; paint(e); } };
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
-    
-    canv.ontouchstart = (e) => { if(cur!==0) { drawing = true; startPaint(e.touches[0]); e.preventDefault(); } };
-    canv.ontouchend = () => { drawing = false; ctx.beginPath(); };
-    canv.ontouchmove = (e) => { if(drawing) { paint(e.touches[0]); e.preventDefault(); } };
-
-    function startPaint(e) {
-        const r = canv.getBoundingClientRect();
-        ctx.beginPath();
-        ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
-    }
 
     function paint(e) {
         ctx.strokeStyle = document.getElementById('brushColor').value;
@@ -200,13 +184,12 @@
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(book))));
         const url = window.location.href.split('?')[0] + "?data=" + encoded;
         navigator.clipboard.writeText(url);
-        alert("¡Enlace listo! Pégalo en WhatsApp.");
+        alert("¡Enlace copiado! Pégalo en WhatsApp.");
     }
 
     function savePDF() {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('l', 'mm', [210, 148]); 
-        doc.setFont("helvetica", "bold");
+        const doc = new jsPDF('l', 'mm', [210, 148]);
         doc.text(book.title, 105, 20, {align: 'center'});
         doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 30, 180, 100);
         doc.save(`Cuento-${book.title}.pdf`);
@@ -214,3 +197,5 @@
 </script>
 </body>
 </html>
+
+
