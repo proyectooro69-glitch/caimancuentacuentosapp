@@ -31,18 +31,18 @@
     <h1>🐊 CaimánCuentacuentos</h1>
     
     <div class="input-group">
-        <input type="text" id="authorName" placeholder="Tu nombre (Autora)">
+        <input type="text" id="authorName" placeholder="Nombre de la Autora">
         <input type="text" id="topic" placeholder="Ej: Un elefante azul...">
         <div class="btn-zone">
-            <button class="btn-main" onclick="generateDemo()">✨ CREAR CUENTO (MODO PRUEBA)</button>
+            <button class="btn-main" id="createBtn" onclick="buildFullStory()">✨ CREAR CUENTO MÁGICO</button>
         </div>
     </div>
 
-    <div id="loader" class="status">🪄 Preparando tu libro...</div>
+    <div id="loader" class="status">🪄 La magia está trabajando...</div>
 
     <div id="book-viewer">
         <h2 id="page-label">Bienvenido</h2>
-        <div id="story-txt">Escribe tu nombre y una idea para empezar.</div>
+        <div id="story-txt">Escribe una idea arriba para inventar un libro juntos.</div>
         
         <div id="canvas-wrap">
             <canvas id="paintCanvas" width="600" height="400"></canvas>
@@ -67,41 +67,58 @@
 </div>
 
 <script>
-    // Sin llaves para que no falle
+    const G_KEY = "AIzaSyANHfYhYRkoHZ4WfwqpPFOKxE-YeRkyfQw";
+    const H_TOKEN = "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";
+
     let book = { title: "", author: "", pages: [], images: [] };
     let cur = 0;
     const canv = document.getElementById('paintCanvas');
     const ctx = canv.getContext('2d');
     let drawing = false;
 
-    function generateDemo() {
+    // IMAGEN BLANCA DE RESPALDO (Por si falla la API)
+    const backupImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQAQMAAAAnX66uAAAAA1BMVEX///+nxBvIAAAAAXRSTlMAQObYZgAAADlJREFUeNrtwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB06969AAAAABJRU5ErkJggg==";
+
+    async function buildFullStory() {
         const topic = document.getElementById('topic').value || "Cuento Mágico";
-        const author = document.getElementById('authorName').value || "Autora Anónima";
+        const author = document.getElementById('authorName').value || "Autora";
         const loader = document.getElementById('loader');
-        
         loader.style.display = "block";
         
-        // Simulamos la carga para mostrar todos los botones
-        setTimeout(() => {
-            book.title = topic;
-            book.author = author;
-            book.pages = [
-                `Portada: ${topic}`,
-                "Había una vez un personaje muy especial...",
-                "Le gustaba mucho jugar y explorar el mundo.",
-                "Un día, encontró un tesoro escondido.",
-                "Compartió su alegría con todos sus amigos.",
-                "Y vivieron felices para siempre."
-            ];
-            // Imagen de prueba blanca para colorear
-            book.images = Array(6).fill("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAGQAQMAAAAnX66uAAAAA1BMVEX///+nxBvIAAAAAXRSTlMAQObYZgAAADlJREFUeNrtwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfBuCAAAB06969AAAAABJRU5ErkJggg==");
+        try {
+            // Intentar generar historia con Gemini
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${G_KEY}`, {
+                method:"POST", headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({contents:[{parts:[{text:`Cuento corto de 5 escenas sobre ${topic} en JSON: {"titulo":"T","escenas":["1","2","3","4","5"]}`}]}]})
+            });
             
-            loader.style.display = "none";
-            document.getElementById('nav-controls').style.display = 'flex';
-            document.getElementById('author-zone').style.display = 'block';
-            document.getElementById('display-author').innerText = "Escrito por: " + author;
-            showPage(0);
-        }, 1000);
+            if (!res.ok) throw new Error("API Error");
+
+            const data = await res.json();
+            const cleanText = data.candidates[0].content.parts[0].text.match(/\{.*\}/s)[0];
+            const parsed = JSON.parse(cleanText);
+            
+            book.title = parsed.titulo;
+            book.pages = [parsed.titulo, ...parsed.escenas];
+            book.images = Array(6).fill(backupImg); // Por ahora blanco para asegurar que cargue
+        } catch (e) {
+            // SI FALLA LA API, USAR DATOS DE PRUEBA (Para que veas los botones)
+            book.title = topic;
+            book.pages = ["Portada", "Escena 1", "Escena 2", "Escena 3", "Escena 4", "Fin"];
+            book.images = Array(6).fill(backupImg);
+            console.log("Usando modo de respaldo");
+        }
+
+        book.author = author;
+        finishApp();
+    }
+
+    function finishApp() {
+        document.getElementById('loader').style.display = "none";
+        document.getElementById('nav-controls').style.display = 'flex';
+        document.getElementById('author-zone').style.display = 'block';
+        document.getElementById('display-author').innerText = "Escrito por: " + book.author;
+        showPage(0);
     }
 
     function showPage(idx) {
@@ -118,7 +135,7 @@
         if(n >= 0 && n < 6) showPage(n);
     }
 
-    // Dibujo digital
+    // DIBUJO
     canv.onmousedown = (e) => { drawing = true; paint(e); };
     canv.onmouseup = () => { drawing = false; ctx.beginPath(); };
     canv.onmousemove = (e) => { if(drawing) paint(e); };
@@ -134,8 +151,10 @@
     function clearCanvas() { showPage(cur); }
 
     function copyLink() {
-        alert("¡Enlace generado! (En modo prueba se copia la URL actual)");
-        navigator.clipboard.writeText(window.location.href);
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(book))));
+        const url = window.location.href.split('?')[0] + "?data=" + encoded;
+        navigator.clipboard.writeText(url);
+        alert("¡Enlace copiado para compartir!");
     }
 
     function savePDF() {
@@ -144,7 +163,7 @@
         doc.text(book.title, 105, 15, {align: 'center'});
         doc.text("Por: " + book.author, 105, 25, {align: 'center'});
         doc.addImage(canv.toDataURL("image/png"), 'PNG', 15, 35, 180, 100);
-        doc.save(`Cuento-${book.author}.pdf`);
+        doc.save(`Cuento-${book.title}.pdf`);
     }
 </script>
 </body>
